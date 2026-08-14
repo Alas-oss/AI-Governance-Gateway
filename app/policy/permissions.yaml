@@ -1,0 +1,80 @@
+policies:
+  junior:
+    allowed_tools:
+      - "web_search"
+      - "calculator"
+      - "docs.read_public"
+    allowed_tool_prefixes:
+      - "public."
+    restricted_doc_tags:
+      - "[INTERNAL-SENIOR-ONLY]"
+      - "[INTERNAL-ADMIN-ONLY]"
+      - "[FINANCE-RESTRICTED]"
+    allow_all_tools: false
+
+  mid:
+    allowed_tools:
+      - "web_search"
+      - "calculator"
+      - "docs.read_public"
+      - "docs.read_internal"
+      - "db.readonly_query"
+    allowed_tool_prefixes:
+      - "public."
+      - "internal.readonly."
+    restricted_doc_tags:
+      - "[INTERNAL-ADMIN-ONLY]"
+      - "[FINANCE-RESTRICTED]"
+    allow_all_tools: false
+
+  senior:
+    allowed_tools:
+      - "web_search"
+      - "calculator"
+      - "docs.read_public"
+      - "docs.read_internal"
+      - "db.readonly_query"
+      - "db.write_query"
+      - "code_interpreter"
+    allowed_tool_prefixes:
+      - "public."
+      - "internal."
+      - "db."
+    restricted_doc_tags:
+      - "[INTERNAL-ADMIN-ONLY]"
+    allow_all_tools: false
+
+  admin:
+    allowed_tools: []
+    allowed_tool_prefixes: []
+    restricted_doc_tags: []
+    allow_all_tools: true
+
+default_policy:
+  allowed_tools:
+    - "web_search"
+  allowed_tool_prefixes: []
+  restricted_doc_tags:
+    - "[INTERNAL-SENIOR-ONLY]"
+    - "[INTERNAL-ADMIN-ONLY]"
+    - "[FINANCE-RESTRICTED]"
+  allow_all_tools: false
+
+department_policies:
+  hr:
+    junior:
+      additional_restricted_doc_tags:
+        - "[HR-PEER-COMPENSATION]"
+        - "[HR-EXECUTIVE-COMPENSATION]"
+    mid:
+      additional_restricted_doc_tags:
+        - "[HR-PEER-COMPENSATION]"
+        - "[HR-EXECUTIVE-COMPENSATION]"
+    senior:
+      additional_restricted_doc_tags:
+        - "[HR-PEER-COMPENSATION]"
+      additional_masking_exempt_entities:
+        - "BANK_CARD_NUMBER"
+        - "CREDIT_CARD"
+    admin:
+      additional_restricted_doc_tags: [] 
