@@ -87,10 +87,24 @@ def build_bank_card_recognizer() -> PatternRecognizer:
         context=["card", "visa", "mastercard", "amex", "credit", "debit", "pan"],
     )
 
+_MONETARY_AMOUNT_PATTERN = Pattern(
+    name="monetary_amount",
+    regex="\$\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b|\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\s?(?:USD|EUR|GBP|dollars)\b",
+    score=0.6,
+)
+
+def build_monetary_amount_recognizer() -> PatternRecognizer:
+    return PatternRecognizer(
+        supported_entity="MONETARY_AMOUNT",
+        patterns=[_MONETARY_AMOUNT_PATTERN],
+        context=["salary", "compensation", "pay", "wage", "income", "bonus", "per month", "per year", "annual", "cost", "price"]
+    )
+
 def build_custom_recognizers() -> List[PatternRecognizer]:
     return [
         build_swift_bic_recognizer(),
         build_internal_ip_recognizer(),
         build_proprietary_source_recognizer(),
         build_bank_card_recognizer(),
+        build_monetary_amount_recognizer(),
     ]

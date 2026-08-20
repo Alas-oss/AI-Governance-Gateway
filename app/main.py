@@ -15,7 +15,7 @@ from app.cache.semantic_cache import SemanticCache, extract_cache_query_text
 from app.cache.vector_store import QdrantVectorStore
 from app.config import get_settings
 from app.guardrails.engine import get_engine, init_guardrails_engine
-from app.guardrails.pipeline import mask_inbound_payload, mask_outbound_response_json
+from app.guardrails.pipeline import build_persisted_view, mask_inbound_payload, mask_outbound_response_json
 from app.observability.langfuse_logger import AuditLogger
 from app.policy.enforcement import (
     PolicyLoadError,
@@ -113,6 +113,7 @@ async def governed_proxy(path: str, request: Request) -> Response:
     if user is None:
         raise HTTPException(status_code=401, detail="Missing authenticated user context.")
 
+    assert rate_limiter is not None
     limit_result = await rate_limiter.check_and_record(user.user_id)
     if not limit_result.allowed:
         raise HTTPException(
@@ -125,28 +126,48 @@ async def governed_proxy(path: str, request: Request) -> Response:
         )
 
     json_body: Optional[dict] = None
+    policy_filtered_body: Optional[dict] = None
     raw_body = await request.body()
     if raw_body:
         try:
             json_body = _json.loads(raw_body)
         except _json.JSONDecodeError as exc:
-            raise HTTPException(status_code=400, detail=f"Request body is not valid JSON: {exc}") from exc
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Request body is not valid JSON: {exc}"
+                ) from exc
 
     if json_body is not None:
         try:
             json_body = enforce_policy_on_payload(json_body, user, settings)
         except Exception as exc:  # noqa: BLE001 - never let a policy bug leak upstream unfiltered
             logger.exception("Policy enforcement failed for user_id=%s path=%s", user.user_id, path)
-            raise HTTPException(status_code=500, detail="Governance policy enforcement failed.") from exc
+            raise HTTPException(
+                status_code=500, 
+                detail="Governance policy enforcement failed."
+                )from exc
 
         try:
-            json_body = mask_inbound_payload(json_body, get_engine(), exempt_entities=get_masking_exempt_entities(user, settings))
+            json_body = mask_inbound_payload(
+                policy_filtered_body, get_engine(), exempt_entities=get_masking_exempt_entities(user, settings))
         except Exception as exc:  # noqa: BLE001 - a masking bug must block the call, not leak PII upstream
             logger.exception("Inbound data masking failed for user_id=%s path=%s", user.user_id, path)
-            raise HTTPException(status_code=500, detail="Governance data-masking enforcement failed.") from exc
+            raise HTTPException(
+                status_code=500, 
+                detail="Governance data-masking enforcement failed."
+                ) from exc
 
     assert token_accounting is not None  
     prompt_tokens = token_accounting.count_prompt_tokens(json_body)
+
+    persisted_request_body: Optional[dict] = None
+    if policy_filtered_body is not None:
+        try:
+            persisted_request_body = build_persisted_view(policy_filtered_body, get_engine())
+        except Exception: # noqa: BLE001 - fail closed for persistence only; the live call aready succeeded
+            logger.exception(
+                "Persisted-view masking failed for user_id="
+            )
 
     cache_query_text = ""
     has_tools = isinstance(json_body, dict) and bool(json_body.get("tools"))
