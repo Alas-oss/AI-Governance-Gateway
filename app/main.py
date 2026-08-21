@@ -14,6 +14,8 @@ from app.cache.embeddings import EmbeddingEngine
 from app.cache.semantic_cache import SemanticCache, extract_cache_query_text
 from app.cache.vector_store import QdrantVectorStore
 from app.config import get_settings
+from app.documents.pipeline import generate_request_token, payload_references_documents, resolve_document_references
+from app.documents.registry import DocumentRegistry
 from app.guardrails.engine import get_engine, init_guardrails_engine
 from app.guardrails.pipeline import build_persisted_view, mask_inbound_payload, mask_outbound_response_json
 from app.observability.langfuse_logger import AuditLogger
@@ -35,6 +37,8 @@ settings = get_settings()
 proxy_client = UpstreamProxyClient(settings)
 redis_manager = RedisClientManager(settings)
 audit_logger = AuditLogger(settings)
+
+document_registry = DocumentRegistry()
 
 rate_limiter: Optional[SlidingWindowRateLimiter] = None
 token_accounting: Optional[TokenAccountingEngine] = None
@@ -109,11 +113,16 @@ async def health() -> dict:
 
 @app.api_route("/v1/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def governed_proxy(path: str, request: Request) -> Response:
+    """Catch-all reverse proxy: intercepts every OpenAI-compatible / AI-Agent
+    request, enforces governance policy against the caller's clearance
+    level, then forwards the (mutated) payload to the internal AI Agent
+    infrastructure.
+    """
     user: Optional[UserContext] = getattr(request.state, "user", None)
     if user is None:
         raise HTTPException(status_code=401, detail="Missing authenticated user context.")
 
-    assert rate_limiter is not None
+    assert rate_limiter is not None  
     limit_result = await rate_limiter.check_and_record(user.user_id)
     if not limit_result.allowed:
         raise HTTPException(
@@ -132,30 +141,35 @@ async def governed_proxy(path: str, request: Request) -> Response:
         try:
             json_body = _json.loads(raw_body)
         except _json.JSONDecodeError as exc:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Request body is not valid JSON: {exc}"
-                ) from exc
+            raise HTTPException(status_code=400, detail=f"Request body is not valid JSON: {exc}") from exc
+
+    document_token = generate_request_token()
+    has_document_reference = False
 
     if json_body is not None:
         try:
-            json_body = enforce_policy_on_payload(json_body, user, settings)
-        except Exception as exc:  # noqa: BLE001 - never let a policy bug leak upstream unfiltered
+            policy_filtered_body = enforce_policy_on_payload(json_body, user, settings)
+        except Exception as exc:  # noqa: BLE001 -> never lets a policy bug leak
             logger.exception("Policy enforcement failed for user_id=%s path=%s", user.user_id, path)
-            raise HTTPException(
-                status_code=500, 
-                detail="Governance policy enforcement failed."
-                )from exc
+            raise HTTPException(status_code=500, detail="Governance policy enforcement failed.") from exc
+
+        has_document_reference = payload_references_documents(policy_filtered_body)
+        if has_document_reference:
+            try:
+                policy_filtered_body, _ = resolve_document_references(
+                    policy_filtered_body, user, document_registry, document_token
+                )
+            except Exception as exc:  # noqa: BLE001 -> blocks the call, does not leak a document
+                logger.exception("Document reference resolution failed for user_id=%s path=%s", user.user_id, path)
+                raise HTTPException(status_code=500, detail="Document access resolution failed.") from exc
 
         try:
             json_body = mask_inbound_payload(
-                policy_filtered_body, get_engine(), exempt_entities=get_masking_exempt_entities(user, settings))
-        except Exception as exc:  # noqa: BLE001 - a masking bug must block the call, not leak PII upstream
+                policy_filtered_body, get_engine(), exempt_entities=get_masking_exempt_entities(user, settings)
+            )
+        except Exception as exc:  # noqa: BLE001 -> doesn't allow a masking bug to leak PII
             logger.exception("Inbound data masking failed for user_id=%s path=%s", user.user_id, path)
-            raise HTTPException(
-                status_code=500, 
-                detail="Governance data-masking enforcement failed."
-                ) from exc
+            raise HTTPException(status_code=500, detail="Governance data-masking enforcement failed.") from exc
 
     assert token_accounting is not None  
     prompt_tokens = token_accounting.count_prompt_tokens(json_body)
@@ -163,19 +177,24 @@ async def governed_proxy(path: str, request: Request) -> Response:
     persisted_request_body: Optional[dict] = None
     if policy_filtered_body is not None:
         try:
-            persisted_request_body = build_persisted_view(policy_filtered_body, get_engine())
-        except Exception: # noqa: BLE001 - fail closed for persistence only; the live call aready succeeded
-            logger.exception(
-                "Persisted-view masking failed for user_id="
+            persisted_request_body = build_persisted_view(
+                policy_filtered_body, get_engine(), document_token=document_token
             )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "Persisted-view masking failed for user_id=%s path=%s; skipping cache/audit-log for this request.",
+                user.user_id,
+                path,
+            )
+            persisted_request_body = None
 
     cache_query_text = ""
     has_tools = isinstance(json_body, dict) and bool(json_body.get("tools"))
-    if semantic_cache is not None and json_body is not None and not has_tools:
-        cache_query_text = extract_cache_query_text(json_body)
+    if semantic_cache is not None and persisted_request_body is not None and not has_tools and not has_document_reference:
+        cache_query_text = extract_cache_query_text(persisted_request_body)
         try:
             lookup_result = semantic_cache.lookup(cache_query_text)
-        except Exception:  # noqa: BLE001 - a cache bug should degrade to a miss, not break the request
+        except Exception:  # noqa: BLE001 -> a cache bug should degrades to a miss
             logger.exception("Semantic cache lookup failed for user_id=%s path=%s; treating as a miss.", user.user_id, path)
             lookup_result = None
 
@@ -183,7 +202,7 @@ async def governed_proxy(path: str, request: Request) -> Response:
             audit_logger.log_call(
                 user_id=user.user_id,
                 department=user.department,
-                masked_request=json_body,
+                masked_request=persisted_request_body,
                 masked_response=lookup_result.response_payload,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=0,
@@ -210,6 +229,7 @@ async def governed_proxy(path: str, request: Request) -> Response:
     content_type = upstream_response.headers.get("content-type", "")
     response_body = upstream_response.content
     completion_tokens = 0
+    persisted_response_body: Optional[dict] = None
 
     if "application/json" in content_type and response_body:
         try:
@@ -224,35 +244,64 @@ async def governed_proxy(path: str, request: Request) -> Response:
                 status_code=502, detail="Upstream returned malformed JSON; response withheld for safety."
             )
 
+        raw_response_json = response_json 
+
         try:
             response_json = mask_outbound_response_json(
-                response_json, get_engine(), exempt_entities=get_masking_exempt_entities(user, settings)
+                raw_response_json, get_engine(), exempt_entities=get_masking_exempt_entities(user, settings)
             )
-        except Exception as exc:  # noqa: BLE001 - same fail-closed reasoning as above
+        except Exception as exc:  # noqa: BLE001 -> same fail-closed reasoning as above
             logger.exception("Outbound data masking failed for user_id=%s path=%s", user.user_id, path)
             raise HTTPException(status_code=500, detail="Governance data-masking enforcement failed.") from exc
+
+        if has_document_reference:
+            persisted_response_body = {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "[RESPONSE OMITTED FROM AUDIT LOG: generated using a restricted document]",
+                        }
+                    }
+                ]
+            }
+        else:
+            try:
+                persisted_response_body = build_persisted_view(raw_response_json, get_engine(), is_response=True)
+            except Exception:  # noqa: BLE001 -> fail closed for persistence only
+                logger.exception(
+                    "Persisted-view masking failed for user_id=%s path=%s; skipping cache/audit-log for this response.",
+                    user.user_id,
+                    path,
+                )
+                persisted_response_body = None
 
         completion_tokens = token_accounting.count_completion_tokens(response_json)
         response_body = _json.dumps(response_json).encode("utf-8")
 
     try:
         await token_accounting.record_usage(user.department, prompt_tokens, completion_tokens)
-    except Exception:  # noqa: BLE001 - accounting must never block a response from returning
+    except Exception:  # noqa: BLE001 -> accounting shouldn't block a response from returning
         logger.exception(
             "Token accounting failed for user_id=%s department=%s path=%s", user.user_id, user.department, path
         )
 
-    if semantic_cache is not None and cache_query_text and "application/json" in content_type:
+    if (
+        semantic_cache is not None
+        and cache_query_text
+        and not has_document_reference
+        and persisted_response_body is not None
+    ):
         try:
-            semantic_cache.store(cache_query_text, response_json)
-        except Exception:  # noqa: BLE001 - a cache-write failure must never break the response path
+            semantic_cache.store(cache_query_text, persisted_response_body)
+        except Exception:  # noqa: BLE001 
             logger.exception("Semantic cache store failed for user_id=%s path=%s", user.user_id, path)
 
     audit_logger.log_call(
         user_id=user.user_id,
         department=user.department,
-        masked_request=json_body,
-        masked_response=response_json if "application/json" in content_type else None,
+        masked_request=persisted_request_body,
+        masked_response=persisted_response_body,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         cache_hit=False,
