@@ -64,7 +64,7 @@ class TokenAccountingEngine:
             return 0
         total = 0
         for choice in choices:
-            if not isinstance(choices, dict):
+            if not isinstance(choice, dict):
                 continue
             message = choice.get("message")
             if isinstance(message, dict) and isinstance(message.get("content"), str):

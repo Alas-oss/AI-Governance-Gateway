@@ -14,7 +14,7 @@ _SWIFT_BIC_PATTERN = Pattern(
 def build_swift_bic_recognizer() -> PatternRecognizer:
     return PatternRecognizer(
         supported_entity="SWIFT_BIC_CODE",
-        pattern=[_SWIFT_BIC_PATTERN],
+        patterns=[_SWIFT_BIC_PATTERN],
         context=["swift", "bic", "iban", "wire", "bank code", "correspondent bank"],
         global_regex_flags=re.DOTALL | re.MULTILINE,
     )
@@ -28,13 +28,13 @@ _INTERAL_IP_PATTERN = Pattern(
 def build_internal_ip_recognizer() -> PatternRecognizer:
     return PatternRecognizer(
         supported_entity="INTERNAL_IP_ADDRESS",
-        PATTERN=[_INTERAL_IP_PATTERN],
-        CONTEXT=["internal", "server", "host", "vpc", "subnet", "privte network"],
+        patterns=[_INTERAL_IP_PATTERN],
+        context=["internal", "server", "host", "vpc", "subnet", "private network"],
     )
 
 _PROPRIETARY_MARKED_PATTERN = Pattern(
     name="proprietary_source_marker",
-    rgex=r"\b(?:PROPRIETARY|CONFIDENTIAL)[-_ ](?:SOURCE|CODE|INTERNAL)\b[^\n]*",
+    regex=r"\b(?:PROPRIETARY|CONFIDENTIAL)[-_ ](?:SOURCE|CODE|INTERNAL)\b[^\n]*",
     score=0.85,
 )
 _AWS_ACCESS_KEY_PATTERN = Pattern(
@@ -51,7 +51,7 @@ _PRIVATE_KEY_HEADER_PATTERN = Pattern(
 def build_proprietary_source_recognizer() -> PatternRecognizer:
     return PatternRecognizer(
         supported_entity="PROPRIETARY_SOURCE_MARKER",
-        pattern=[_PROPRIETARY_MARKED_PATTERN, _AWS_ACCESS_KEY_PATTERN, _PRIVATE_KEY_HEADER_PATTERN],
+        patterns=[_PROPRIETARY_MARKED_PATTERN, _AWS_ACCESS_KEY_PATTERN, _PRIVATE_KEY_HEADER_PATTERN],
         context=["confidential", "proprietary", "internal", "secret", "key", "credential"],
     )
 
@@ -89,7 +89,7 @@ def build_bank_card_recognizer() -> PatternRecognizer:
 
 _MONETARY_AMOUNT_PATTERN = Pattern(
     name="monetary_amount",
-    regex="\$\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b|\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\s?(?:USD|EUR|GBP|dollars)\b",
+    regex=r"\$\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b|\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\s?(?:USD|EUR|GBP|dollars)\b",
     score=0.6,
 )
 

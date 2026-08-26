@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from presidio_analyzer import AnalyzerEngine, RecongnizerResult
+from presidio_analyzer import AnalyzerEngine, RecognizerResult
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 
 from app.config import Settings
@@ -60,9 +60,9 @@ class MaskResult:
     def had_matches(self) -> bool:
         return any(f.masked for f in self.findings)
 
-def _resolve_overlap(results: List[RecongnizerResult]) -> List[RecongnizerResult]:
+def _resolve_overlap(results: List[RecognizerResult]) -> List[RecognizerResult]:
     ordered = sorted(results, key=lambda r: (-r.score, r.start))
-    accepted: List[RecongnizerResult] = []
+    accepted: List[RecognizerResult] = []
     occupied: List[Tuple[int, int]] = []
     for result in ordered:
         overlaps = any(not (result.end <= s or result.start >= e) for s, e in occupied)

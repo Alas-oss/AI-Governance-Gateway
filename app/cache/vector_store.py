@@ -21,7 +21,7 @@ class QdrantVectorStore:
         if self._collection_name not in existing:
             self._client.create_collection(
                 collection_name=self._collection_name,
-                vector_config=VectorParams(size=dimensions, distance=Distance.COSINE),
+                vectors_config=VectorParams(size=dimensions, distance=Distance.COSINE),
             )
             logger.info(
                 "Created semantic cache collection '%s' (dimensions=%d).", self._collection_name, dimensions

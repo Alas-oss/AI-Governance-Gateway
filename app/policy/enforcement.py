@@ -31,7 +31,7 @@ def _load_permission_matrix(path: str) -> PermissionMatrix:
         raise PolicyLoadError(f"Failed to parse permissions YAML: {exc}") from exc
 
     try: 
-        return PermissionMatrix.model_validation(raw)
+        return PermissionMatrix.model_validate(raw)
     except ValidationError as exc:
         raise PolicyLoadError(f"permissions.yaml failed schema validation: {exc}") from exc
 
@@ -67,7 +67,7 @@ def filter_tools(tools: List[Dict[str, Any]], user: UserContext, settings: Setti
                 "Stripped unauthorized tool '%s' for user_id=%s clearance=%s",
                 name,
                 user.user_id,
-                user.clearance_level.vaule,
+                user.clearance_level.value,
             )
     return filtered
 

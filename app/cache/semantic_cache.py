@@ -22,7 +22,7 @@ def extract_cache_query_text(payload: Optional[Dict[str, Any]]) -> str:
     if not isinstance(messages, list):
         return ""
     for message in reversed(messages):
-        if isinstance(messages, dict) and message.get("role") == "user" and isinstance(message.get("content"), str):
+        if isinstance(message, dict) and message.get("role") == "user" and isinstance(message.get("content"), str):
             return message["content"]
     return ""
 

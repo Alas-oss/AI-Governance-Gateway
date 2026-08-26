@@ -19,7 +19,7 @@ class RedisClientManager:
         self._pool = redis.ConnectionPool.from_url(
             self._settings.redis_url,
             max_connections=self._settings.redis_max_connections,
-            decode_response=True,
+            decode_responses=True,
         )
         self._client = redis.Redis(connection_pool=self._pool)
         await self._client.ping()
@@ -38,3 +38,4 @@ class RedisClientManager:
     def client(self) -> redis.Redis:
         if self._client is None:
             raise RuntimeError("RedisClientManager used before start(). Check app lifespan wiring.")
+        return self._client

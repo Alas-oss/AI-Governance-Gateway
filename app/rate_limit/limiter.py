@@ -20,10 +20,10 @@ class RateLimitResult:
 
 class SlidingWindowRateLimiter:
 
-    def __init__(self, client: redis.Redis, *, window_seconds: int, max_request: int) -> None:
+    def __init__(self, client: redis.Redis, *, window_seconds: int, max_requests: int) -> None:
         self._client = client
         self._window_seconds = window_seconds
-        self._max_requests = max_request
+        self._max_requests = max_requests
 
     async def check_and_record(self, user_id: str) -> RateLimitResult:
         key = f"ratelimit:{user_id}"
@@ -32,7 +32,7 @@ class SlidingWindowRateLimiter:
         member = f"{now}:{uuid.uuid4().hex}"
 
         pipe = self._client.pipeline(transaction=True)
-        pipe.zremangebyscore(key, 0, window_start)
+        pipe.zremrangebyscore(key, 0, window_start)
         pipe.zadd(key, {member: now})
         pipe.zcard(key)
         pipe.expire(key, self._window_seconds * 2)

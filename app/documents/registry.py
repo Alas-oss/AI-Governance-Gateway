@@ -12,7 +12,7 @@ _CLEARANCE_ORDER: Dict[ClearanceLevel, int] = {
     ClearanceLevel.ADMIN: 3,
 }
 
-@dataclass(froxen=True)
+@dataclass(frozen=True)
 class DocumentRecord:
     doc_id: str
     name: str
@@ -37,4 +37,5 @@ class DocumentRegistry:
         if record.required_clearance is not None:
             if _CLEARANCE_ORDER[user.clearance_level] < _CLEARANCE_ORDER[record.required_clearance]:
                 return False
+        return True
         

@@ -21,13 +21,14 @@ class ClearancePolicy(BaseModel):
         "[INTERNAL-SENIOR-ONLY]...[/INTERNAL-SENIOR-ONLY], are entirely (reserved for 'admin')."
     )
     masking_exempt_entities: List[str] = Field(
-        default_factory="Presidio entity types (e.g. 'BANK_CARD_NUMBER') that this clearance level is " \
-        "exempt from having masked -- for roles that have a legitemate, authorized need to see " \
-        "that category of data as part of their job (e.g. HR viewing an employee;s card on file).",
+        default_factory=list,
+        description="Presidio entity types (e.g. 'BANK_CARD_NUMBER') that this clearance level is "
+        "exempt from having masked -- for roles that have a legitimate, authorized need to see "
+        "that category of data as part of their job (e.g. HR viewing an employee's card on file).",
     )
 
 class DepartmentOverride(BaseModel):
-    additional_restricted_doc_tag: List[str] = Field(default_factory=list)
+    additional_restricted_doc_tags: List[str] = Field(default_factory=list)
     additional_masking_exempt_entities: List[str] = Field(
         default_factory=list, 
         description="Entity types exempts from masking specifically for this department+clearance "

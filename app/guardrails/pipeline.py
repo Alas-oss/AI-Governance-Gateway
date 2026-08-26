@@ -36,14 +36,20 @@ def _mask_openai_style_choices(
     if not isinstance(choices, list):
         return payload
 
+    new_choices = []
     for choice in choices:
         if not isinstance(choice, dict):
+            new_choices.append(choice)
             continue
+        choice = dict(choice) 
         message = choice.get("message")
-        if isinstance(message, dict) and isinstance(message.get("contect"), str):
-            message["content"] = engine.mask_text(message["content"], entities=entities, exempt_entities=exempt_entities).text
-        if isinstance(choice.get("text", str)):
+        if isinstance(message, dict) and isinstance(message.get("content"), str):
+            masked_content = engine.mask_text(message["content"], entities=entities, exempt_entities=exempt_entities).text
+            choice["message"] = {**message, "content": masked_content}
+        if isinstance(choice.get("text"), str):
             choice["text"] = engine.mask_text(choice["text"], entities=entities, exempt_entities=exempt_entities).text
+        new_choices.append(choice)
+    payload["choices"] = new_choices
     return payload
 
 def mask_outbound_response_json(

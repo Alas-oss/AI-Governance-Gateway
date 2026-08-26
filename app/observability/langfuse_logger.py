@@ -10,15 +10,15 @@ logger = logging.getLogger(__name__)
 def langfuse_mask(*, data: Any, **_: Any) -> Any:
     if isinstance(data, str):
         try:
-            from app.documents.pipeline import STRUCTURAL_SENTINEL_PATTERM
+            from app.documents.pipeline import STRUCTURAL_SENTINEL_PATTERN
 
-            return STRUCTURAL_SENTINEL_PATTERM.sub("[DOCUMENT CONTENT REDACTED]", data)
+            return STRUCTURAL_SENTINEL_PATTERN.sub("[DOCUMENT CONTENT REDACTED]", data)
         except ImportError:
             return data
     if isinstance(data, dict):
-        return {key: _langfuse_mask(data=value) for key, value in data.items()}
+        return {key: langfuse_mask(data=value) for key, value in data.items()}
     if isinstance(data, list):
-        return [_langfuse_mask(data=item) for item in data]
+        return [langfuse_mask(data=item) for item in data]
     return data
 
 class AuditLogger:
@@ -37,7 +37,7 @@ class AuditLogger:
                 public_key=settings.langfuse_public_key,
                 secret_key=settings.langfuse_secret_key,
                 host=settings.langfuse_host,
-                mask=_langfuse_mask,
+                mask=langfuse_mask,
             )
             logger.info("Langfuse audit logging enabled (host=%s, mask hook active).", settings.langfuse_host)
         except Exception as exc: # noqa: BLE001 -> observability shouldn't crash the gateway

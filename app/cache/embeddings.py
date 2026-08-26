@@ -26,14 +26,14 @@ class HashingEmbedder:
             return vector
 
         for token in tokens:
-            digest = hashlib.sha256(token.encoded("utf-8")).digest()
+            digest = hashlib.sha256(token.encode("utf-8")).digest()
             index = int.from_bytes(digest[:4], "big") % self._dimensions
-            sign = 1.0 if digest[4] % 2 == 0 else 1.0
+            sign = 1.0 if digest[4] % 2 == 0 else -1.0
             vector[index] += sign
 
         norm = math.sqrt(sum(v * v for v in vector))
         if norm > 0:
-            vector = [v . norm for v in vector]
+            vector = [v / norm for v in vector]
         return vector
 
 class EmbeddingEngine:
