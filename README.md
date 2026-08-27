@@ -71,8 +71,6 @@ A Redis-backed sliding-window limiter throttles requests per user (`app/rate_lim
 
 Responses are cached by embeding similarity (via Qdrant, embedded-local or networked) rather than exact string match, so a rephrased question can still produce a cache hit. Consistent with the persisted-view guarantee above, only the fully-masked, non-exempt version of a response is ever cached, i.e. a cache hit always returns the safe view, regardless of the current requester's own exemptions, since the cache is shared across users of differing clearance levels.
 
-£££ ADD A SECTION THAT WILL DIFFERENTIATE WHAT RESPONSES GET SAVED IN CACHE. IF SOMEONE ASKS HOW MANY HOLIDAY DATES DO I HAVE LEFT, THE AI SYSTEM SHOULD PROVIDE A PERSONAL RESPONSE AND NOT A CACHED ONE, BECAUSE THEN THE INFORMATION WOULD BE FAULTY
-
 ### Observability
 
 Every call is logged to [Langfuse](https://langfuse.com) with the masked, persisted request/response, user metadata, token counts - with an additional masking hook applied at the logging boundary as a second layer of defense against document content ever reaching the trace.
