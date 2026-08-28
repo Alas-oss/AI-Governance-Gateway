@@ -71,6 +71,17 @@ A Redis-backed sliding-window limiter throttles requests per user (`app/rate_lim
 
 Responses are cached by embeding similarity (via Qdrant, embedded-local or networked) rather than exact string match, so a rephrased question can still produce a cache hit. Consistent with the persisted-view guarantee above, only the fully-masked, non-exempt version of a response is ever cached, i.e. a cache hit always returns the safe view, regardless of the current requester's own exemptions, since the cache is shared across users of differing clearance levels.
 
+### What does and doesn't get cached
+
+Not every question has the same answer, especially when they are person-specific. So caching by similarity alone isn't safe for everything. The gateway draws a line between two kinds of questions:
+
+- **Cacheable, for general questions.** "What's the parental leave policy?", "How do I file an expense report?" These are the questions have one correct answer regardless of who's asking or when, so serving a cached response is both safe and desirable, so it's faster and cheaper, and the answer doesn't go stale within a reasonable TTL.
+- **Not cacheable, for personal questions.** "How many holiday days do I have left?", "What's my current PTO balance?" The answer to these questions depend on *who's asking* and *what's true right now*, so caching them by semantic similarity would mean one employee's balance getting served to another employee asking a similarly-worded questions, or a correct ansewr today becoming wrong later the moment something changes. Ansewrs like this must always go to the live upstream call, per request, per user.
+
+In practice this means requests are only eligible for the semantic cache when they don't reference document IDs, don't invoke tools/function-calling (which is how personal/live-data lookups are expected to be surfaced), and aren'totherwise flagged as user-specific by the request shape. Anything on that path bypasses the cache lookup and always goes to the upstream, so the response reflects the current state for that specific person rather than a similarity match to something someone else previously asked.
+ 
+If you're extending this gateway to sit in front of tools that expose per-user live data, keep that boundary in mind: caching should stay scoped to answers that are true independent of *who* is asking and *when*.
+
 ### Observability
 
 Every call is logged to [Langfuse](https://langfuse.com) with the masked, persisted request/response, user metadata, token counts - with an additional masking hook applied at the logging boundary as a second layer of defense against document content ever reaching the trace.
