@@ -505,26 +505,6 @@ const PRESETS = [
     tools: ["web_search", "db.write_query"]
   },
   {
-  def support_bot(question: str) -> str:
-      context = retriever(question)
-      system_message = (
-          "You are a helpful customer support agent. "
-          "Answer using only the information provided below:\n\n"
-          + "\n".join(context)
-      )
-      response = client.chat.completions.create(
-          model="gpt-5.4-mini",
-          messages=[
-              {"role": "system", "content": system_message},
-              {"role": "user", "content": question},
-          ],
-      )
-      return response.choices[0].message.content
-
-  if __name__ == "__main__":
-      print(support_bot("How many users can I have on the Starter plan?"))
-  },
-  {
     label: "Document access: HR senior (authorized)",
     clearance: "senior", department: "hr",
     system: "You are an internal HR assistant.",
