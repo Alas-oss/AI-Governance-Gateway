@@ -24,6 +24,7 @@ from app.policy.enforcement import (
     enforce_policy_on_payload,
     get_masking_exempt_entities,
     get_permission_matrix,
+    redact_payload_for_persisted_view,
 )
 from app.proxy.client import UpstreamProxyClient, UpstreamUnavailableError
 from app.rate_limit.limiter import SlidingWindowRateLimiter
@@ -175,10 +176,18 @@ async def governed_proxy(path: str, request: Request) -> Response:
     prompt_tokens = token_accounting.count_prompt_tokens(json_body)
 
     persisted_request_body: Optional[dict] = None
+    had_restricted_context = False
     if policy_filtered_body is not None:
         try:
+            # Redact restricted-tag blocks using the most-restrictive baseline
+            # across the WHOLE permission matrix -- not this requester's own
+            # policy -- so the persisted/audit view never reflects a specific
+            # user's exemption. See app/policy/enforcement.py for why.
+            persisted_source_body, had_restricted_context = redact_payload_for_persisted_view(
+                policy_filtered_body, settings
+            )
             persisted_request_body = build_persisted_view(
-                policy_filtered_body, get_engine(), document_token=document_token
+                persisted_source_body, get_engine(), document_token=document_token
             )
         except Exception:  # noqa: BLE001
             logger.exception(
@@ -261,6 +270,24 @@ async def governed_proxy(path: str, request: Request) -> Response:
                         "message": {
                             "role": "assistant",
                             "content": "[RESPONSE OMITTED FROM AUDIT LOG: generated using a restricted document]",
+                        }
+                    }
+                ]
+            }
+        elif had_restricted_context:
+            # The request that produced this response contained restricted
+            # internal content that this user was personally authorized to
+            # see. We can't reliably scrub the model's free-form paraphrase
+            # of that content field-by-field the way we can with structured
+            # PII, so -- same reasoning as the document case above -- the
+            # safe choice is to omit the persisted response entirely rather
+            # than risk it restating the restricted content in prose.
+            persisted_response_body = {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "[RESPONSE OMITTED FROM AUDIT LOG: generated using restricted internal context]",
                         }
                     }
                 ]

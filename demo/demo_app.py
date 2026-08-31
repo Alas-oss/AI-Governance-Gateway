@@ -18,7 +18,11 @@ from app.documents.registry import DocumentRecord, DocumentRegistry
 from app.guardrails.engine import get_engine, init_guardrails_engine
 from app.guardrails.pipeline import build_persisted_view
 from app.observability.langfuse_logger import AuditLogger
-from app.policy.enforcement import enforce_policy_on_payload, get_masking_exempt_entities
+from app.policy.enforcement import (
+    enforce_policy_on_payload,
+    get_masking_exempt_entities,
+    redact_payload_for_persisted_view,
+)
 
 app = FastAPI(title="AI Governance Gateway -- Live Demo")
 
@@ -47,7 +51,6 @@ demo_document_registry.register(
         content="Day 1: IT setup and badge photo. Day 2: benefits enrollment. Day 3: team introductions.",
         required_clearance=None,  
         required_department=None, 
-        require_deals=None,
     )
 )
 
@@ -63,7 +66,6 @@ async def startup() -> None:
     vector_store = QdrantVectorStore(
         path=settings.semantic_cache_path + "_demo",
         collection_name="demo_semantic_cache",
-        discussions=ClearanceLevel==None,
         dimensions=embeddings.dimensions,
     )
     semantic_cache = SemanticCache(embeddings, vector_store, similarity_threshold=settings.semantic_cache_similarity_threshold)
@@ -217,8 +219,12 @@ async def run_pipeline(req: DemoRequest) -> Dict[str, Any]:
     live_view = {**after_policy, "messages": after_masking_messages}
 
     # PERSISTED view - what's allowed into the cache/Langfuse.
+    # Redacted using the most-restrictive baseline across the WHOLE
+    # permission matrix, never this specific user's own clearance -- see
+    # redact_payload_for_persisted_view's docstring for why.
+    persisted_source, had_restricted_context = redact_payload_for_persisted_view(after_policy, settings)
     persisted_view = build_persisted_view(
-        after_policy, get_engine(), document_token=document_token if has_document_reference else None
+        persisted_source, get_engine(), document_token=document_token if has_document_reference else None
     )
 
     # Semantic cache: only for tool-free, document-free turns 
@@ -243,7 +249,10 @@ async def run_pipeline(req: DemoRequest) -> Dict[str, Any]:
     else:
         simulated_with_gateway = _simulate_agent_response(live_view, document_names_resolved)
 
-        # Response side: if a document was resolved, the persisted
+        # Response side: if a document was resolved, or the request touched
+        # restricted internal content this user was personally authorized
+        # to see, omit the persisted response entirely rather than risk it
+        # restating that content in prose.
         if document_names_resolved:
             persisted_response = {
                 "choices": [
@@ -251,6 +260,17 @@ async def run_pipeline(req: DemoRequest) -> Dict[str, Any]:
                         "message": {
                             "role": "assistant",
                             "content": "[RESPONSE OMITTED FROM AUDIT LOG: generated using a restricted document]",
+                        }
+                    }
+                ]
+            }
+        elif had_restricted_context:
+            persisted_response = {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "[RESPONSE OMITTED FROM AUDIT LOG: generated using restricted internal context]",
                         }
                     }
                 ]

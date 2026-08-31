@@ -8,7 +8,7 @@ from presidio_analyzer import Pattern, PatternRecognizer
 _SWIFT_BIC_PATTERN = Pattern(
     name="swift_bic_pattern",
     regex=r"\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b",
-    score=0.30,
+    score=0.3,
 )
 
 def build_swift_bic_recognizer() -> PatternRecognizer:
@@ -89,7 +89,7 @@ def build_bank_card_recognizer() -> PatternRecognizer:
 
 _MONETARY_AMOUNT_PATTERN = Pattern(
     name="monetary_amount",
-    regex=r"\$\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b|\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\s?(?:USD|EUR|GBP|dollars)\b",
+    regex=r"\$\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?:\s?[kKmMbB](?:illion)?)?\b|\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\s?(?:USD|EUR|GBP|dollars)\b",
     score=0.6,
 )
 
