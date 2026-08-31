@@ -72,10 +72,6 @@ def filter_tools(tools: List[Dict[str, Any]], user: UserContext, settings: Setti
     return filtered
 
 def _redact_tags(content: str, tags: List[str]) -> tuple[str, int]:
-    """Shared redaction pass: given a set of restricted-doc-tags, strip any
-    tagged block or line from content. Returns the redacted text and how
-    many blocks/lines were redacted (0 means nothing in this tag set was
-    present in the content)."""
     redacted = content
     total = 0
     for tag in tags:
@@ -94,18 +90,6 @@ def _redact_tags(content: str, tags: List[str]) -> tuple[str, int]:
 
 
 def most_restrictive_doc_tags(settings: Settings) -> List[str]:
-    """The union of every restricted_doc_tags list across the *entire*
-    permission matrix -- every clearance level, the default policy, and
-    every department-specific override's additional tags.
-
-    This is the tag set to use for anything that must be safe to persist
-    or log regardless of who actually made the request. A specific user's
-    own exemptions (e.g. a senior employee legitimately being allowed to
-    see [INTERNAL-SENIOR-ONLY] content live) must never leak into what's
-    written to the audit trail -- the persisted view has to reflect what
-    the most restricted possible viewer in the whole organization would be
-    allowed to see, not what this particular requester was allowed to see.
-    """
     matrix = get_permission_matrix(settings.permissions_file_path)
     tags: set[str] = set(matrix.default_policy.restricted_doc_tags)
     for policy in matrix.policies.values():
@@ -132,22 +116,6 @@ def redact_system_prompt(content: str, user: UserContext, settings: Settings) ->
 def redact_payload_for_persisted_view(
     payload: Dict[str, Any], settings: Settings
 ) -> "tuple[Dict[str, Any], bool]":
-    """Redact restricted-tag blocks from every system message in a request
-    payload using the most-restrictive baseline (most_restrictive_doc_tags),
-    regardless of which user actually made the request.
-
-    This is what the persisted view / audit log / semantic cache must be
-    built from -- never the requester's own permission-filtered payload,
-    since that reflects what THEY were exempted from seeing, not what's
-    safe to log for everyone.
-
-    Returns (redacted_payload, had_restricted_content). had_restricted_content
-    is True if anything was actually redacted here, meaning this request
-    touched restricted internal content -- callers should treat the
-    corresponding persisted RESPONSE as tainted too (see
-    build_persisted_view's guidance: prefer omitting it entirely rather than
-    attempting to scrub the model's free-form paraphrase of that content).
-    """
     tags = most_restrictive_doc_tags(settings)
     mutated = dict(payload)
     had_restricted_content = False

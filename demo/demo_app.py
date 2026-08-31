@@ -185,7 +185,6 @@ async def run_pipeline(req: DemoRequest) -> Dict[str, Any]:
         "tools": [{"type": "function", "function": {"name": name}} for name in req.tools],
     }
 
-    # Policy enforcement (tool stripping + tag redaction)
     after_policy = enforce_policy_on_payload(copy.deepcopy(raw_payload), user, settings)
 
     raw_tool_names = {_tool_name(t) for t in raw_payload["tools"]}
@@ -197,7 +196,6 @@ async def run_pipeline(req: DemoRequest) -> Dict[str, Any]:
         if raw_msg.get("role") == "system" and raw_msg.get("content") != policy_msg.get("content"):
             system_prompt_redacted = True
 
-    # Document reference resolution, gated by clearance/department
     document_token = generate_request_token()
     has_document_reference = payload_references_documents(after_policy)
     document_names_resolved: List[str] = []
@@ -211,23 +209,17 @@ async def run_pipeline(req: DemoRequest) -> Dict[str, Any]:
                 for match in re.finditer(r"\u27e6DOC:[0-9a-f]+:([^\u27e7]+)\u27e7", content):
                     document_names_resolved.append(match.group(1))
 
-    # Data masking - LIVE view (respects exemptions)
     exempt_entities = get_masking_exempt_entities(user, settings)
     after_masking_messages, findings = _mask_messages_with_findings(
         after_policy.get("messages", []), exempt_entities=exempt_entities
     )
     live_view = {**after_policy, "messages": after_masking_messages}
 
-    # PERSISTED view - what's allowed into the cache/Langfuse.
-    # Redacted using the most-restrictive baseline across the WHOLE
-    # permission matrix, never this specific user's own clearance -- see
-    # redact_payload_for_persisted_view's docstring for why.
     persisted_source, had_restricted_context = redact_payload_for_persisted_view(after_policy, settings)
     persisted_view = build_persisted_view(
         persisted_source, get_engine(), document_token=document_token if has_document_reference else None
     )
 
-    # Semantic cache: only for tool-free, document-free turns 
     cacheable = not bool(after_policy.get("tools")) and not has_document_reference
     cache_query_text = ""
     cache_hit = False
@@ -240,7 +232,6 @@ async def run_pipeline(req: DemoRequest) -> Dict[str, Any]:
             cache_hit = True
             cache_similarity = lookup_result.similarity_score
 
-    # Simulated AI response (NOT a real model call)
     simulated_without_gateway = _simulate_agent_response(raw_payload, [])
 
     if cache_hit:
@@ -249,10 +240,6 @@ async def run_pipeline(req: DemoRequest) -> Dict[str, Any]:
     else:
         simulated_with_gateway = _simulate_agent_response(live_view, document_names_resolved)
 
-        # Response side: if a document was resolved, or the request touched
-        # restricted internal content this user was personally authorized
-        # to see, omit the persisted response entirely rather than risk it
-        # restating that content in prose.
         if document_names_resolved:
             persisted_response = {
                 "choices": [
@@ -281,7 +268,6 @@ async def run_pipeline(req: DemoRequest) -> Dict[str, Any]:
         if cacheable and semantic_cache is not None and cache_query_text:
             semantic_cache.store(cache_query_text, persisted_response)
 
-    # Audit logging, given the persisted view
     try:
         audit_logger.log_call(
             user_id=user.user_id,

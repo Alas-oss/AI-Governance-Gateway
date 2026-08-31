@@ -114,11 +114,6 @@ async def health() -> dict:
 
 @app.api_route("/v1/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def governed_proxy(path: str, request: Request) -> Response:
-    """Catch-all reverse proxy: intercepts every OpenAI-compatible / AI-Agent
-    request, enforces governance policy against the caller's clearance
-    level, then forwards the (mutated) payload to the internal AI Agent
-    infrastructure.
-    """
     user: Optional[UserContext] = getattr(request.state, "user", None)
     if user is None:
         raise HTTPException(status_code=401, detail="Missing authenticated user context.")
@@ -179,10 +174,6 @@ async def governed_proxy(path: str, request: Request) -> Response:
     had_restricted_context = False
     if policy_filtered_body is not None:
         try:
-            # Redact restricted-tag blocks using the most-restrictive baseline
-            # across the WHOLE permission matrix -- not this requester's own
-            # policy -- so the persisted/audit view never reflects a specific
-            # user's exemption. See app/policy/enforcement.py for why.
             persisted_source_body, had_restricted_context = redact_payload_for_persisted_view(
                 policy_filtered_body, settings
             )
@@ -275,13 +266,6 @@ async def governed_proxy(path: str, request: Request) -> Response:
                 ]
             }
         elif had_restricted_context:
-            # The request that produced this response contained restricted
-            # internal content that this user was personally authorized to
-            # see. We can't reliably scrub the model's free-form paraphrase
-            # of that content field-by-field the way we can with structured
-            # PII, so -- same reasoning as the document case above -- the
-            # safe choice is to omit the persisted response entirely rather
-            # than risk it restating the restricted content in prose.
             persisted_response_body = {
                 "choices": [
                     {
