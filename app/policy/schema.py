@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field
 from app.auth.jwt_utils import ClearanceLevel
 
 class ClearancePolicy(BaseModel):
+    allow_all_tools: bool = Field(
+        default=False,
+        description="If true, every tool/function-call in the request is passed through unfiltered "
+        "(intended for 'admin'). When false, tools are filtered against allowed_tools / allowed_tool_prefixes.",
+    )
     allowed_tools: List[str] = Field(
         default_factory=list, description="Exact tool/function names permitted for this clearance level."
     )

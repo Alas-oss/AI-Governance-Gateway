@@ -8,7 +8,7 @@ from presidio_analyzer import Pattern, PatternRecognizer
 _SWIFT_BIC_PATTERN = Pattern(
     name="swift_bic_pattern",
     regex=r"\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b",
-    score=0.55,
+    score=0.30,
 )
 
 def build_swift_bic_recognizer() -> PatternRecognizer:

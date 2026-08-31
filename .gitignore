@@ -3,3 +3,4 @@ notes.md
 \venv
 \.dev_keys
 *.pyc
+\data
