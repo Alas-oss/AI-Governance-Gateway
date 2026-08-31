@@ -7,9 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from jwt import encode
 
-from data.qdrant_semantic_cache_demo import qdrant
 from app.auth.jwt_utils import ClearanceLevel, UserContext
 from app.cache.embeddings import EmbeddingEngine
 from app.cache.semantic_cache import SemanticCache, extract_cache_query_text
