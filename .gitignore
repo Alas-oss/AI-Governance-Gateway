@@ -1,3 +1,5 @@
 .env
 notes.md
 \venv
+\.dev_keys
+*.pyc
