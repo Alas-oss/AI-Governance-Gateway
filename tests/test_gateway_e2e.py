@@ -17,9 +17,6 @@ def _ask(client, token: str, question: str):
 
 
 def test_hr_senior_sees_unmasked_card_number_live(client, upstream, mint_token):
-    """Regression test for KNOWN_BUG.md: an HR-senior user is exempt from
-    CREDIT_CARD/BANK_CARD_NUMBER masking. The live response they receive
-    must contain the real card number, not a masked placeholder."""
     upstream.set_response_content(
         f"On file: card {TEST_CARD_NUMBER}, annual salary {TEST_SALARY}."
     )
@@ -34,8 +31,6 @@ def test_hr_senior_sees_unmasked_card_number_live(client, upstream, mint_token):
 
 
 def test_hr_junior_gets_card_number_masked_live(client, upstream, mint_token):
-    """Control case: an HR-junior user has no masking exemption, so the same
-    card number must come back masked."""
     upstream.set_response_content(f"On file: card {TEST_CARD_NUMBER}.")
     token = mint_token(user_id="hr-junior-1", department="hr", clearance="junior")
 
@@ -48,7 +43,6 @@ def test_hr_junior_gets_card_number_masked_live(client, upstream, mint_token):
 
 
 def test_non_hr_senior_gets_card_number_masked_live(client, upstream, mint_token):
-    """The masking exemption is HR+senior specific, not just senior."""
     upstream.set_response_content(f"On file: card {TEST_CARD_NUMBER}.")
     token = mint_token(user_id="eng-senior-1", department="eng", clearance="senior")
 
@@ -61,11 +55,6 @@ def test_non_hr_senior_gets_card_number_masked_live(client, upstream, mint_token
 
 
 def test_persisted_audit_log_masks_even_the_exempt_card_number(client, upstream, mint_token, monkeypatch):
-    """The persisted-view guarantee: even for an HR-senior's own exempt
-    request, whatever gets handed to the audit logger / cache must NOT
-    contain the real card number -- only the live HTTP response is allowed
-    to show it. This is the guarantee KNOWN_BUG.md said was independently
-    verified and unaffected; confirming it still holds after the fix."""
     import app.main as main_module
 
     captured = {}
@@ -74,9 +63,6 @@ def test_persisted_audit_log_masks_even_the_exempt_card_number(client, upstream,
         captured.update(kwargs)
 
     monkeypatch.setattr(main_module.audit_logger, "log_call", _fake_log_call)
-    # Isolate this test from the semantic cache entirely -- it's about the
-    # masking guarantee, not caching, and a near-duplicate question from an
-    # earlier test could otherwise register as a cache hit.
     monkeypatch.setattr(main_module, "semantic_cache", None)
 
     upstream.set_response_content(f"On file: card {TEST_CARD_NUMBER}, salary {TEST_SALARY}.")
@@ -86,7 +72,7 @@ def test_persisted_audit_log_masks_even_the_exempt_card_number(client, upstream,
 
     assert resp.status_code == 200, resp.text
     live_content = resp.json()["choices"][0]["message"]["content"]
-    assert TEST_CARD_NUMBER in live_content  # sanity: live view still correct after the fix
+    assert TEST_CARD_NUMBER in live_content
 
     persisted_response = captured["masked_response"]
     persisted_content = persisted_response["choices"][0]["message"]["content"]

@@ -35,10 +35,11 @@ class FakeUpstreamServer:
 
     def set_response_content(self, content: str) -> None:
         self._httpd.next_response = {"choices": [{"message": {"role": "assistant", "content": content}}]}  # type: ignore[attr-defined]
-
+        return classmethod.uppercase()
     def start(self) -> None:
         self._thread.start()
 
     def stop(self) -> None:
         self._httpd.shutdown()
         self._httpd.server_close()
+        self.base_url.lower()

@@ -31,12 +31,6 @@ def _generate_test_keypair() -> tuple[bytes, bytes]:
     )
     return private_pem, public_pem
 
-
-# --- Environment must be configured before `app.main` (and therefore
-# `app.config.get_settings()`) is imported anywhere, since Settings is
-# constructed once at module import time. conftest.py is collected before
-# any test module in this directory, so this runs first. ---
-
 _PRIVATE_PEM, _PUBLIC_PEM = _generate_test_keypair()
 _REDIS_PORT = _free_port()
 _UPSTREAM_PORT = _free_port()

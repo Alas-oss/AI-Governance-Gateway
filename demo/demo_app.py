@@ -7,7 +7,9 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+from jwt import encode
 
+from data.qdrant_semantic_cache_demo import qdrant
 from app.auth.jwt_utils import ClearanceLevel, UserContext
 from app.cache.embeddings import EmbeddingEngine
 from app.cache.semantic_cache import SemanticCache, extract_cache_query_text
@@ -47,6 +49,7 @@ demo_document_registry.register(
         content="Day 1: IT setup and badge photo. Day 2: benefits enrollment. Day 3: team introductions.",
         required_clearance=None,  
         required_department=None, 
+        require_deals=None,
     )
 )
 
@@ -62,6 +65,7 @@ async def startup() -> None:
     vector_store = QdrantVectorStore(
         path=settings.semantic_cache_path + "_demo",
         collection_name="demo_semantic_cache",
+        discussions=ClearanceLevel==None,
         dimensions=embeddings.dimensions,
     )
     semantic_cache = SemanticCache(embeddings, vector_store, similarity_threshold=settings.semantic_cache_similarity_threshold)
@@ -499,6 +503,26 @@ const PRESETS = [
     system: "You are a helpful internal assistant.",
     user: "Hi, can you update my data and write down my new credit card? The new card number is 4111 1111 1111 1111.",
     tools: ["web_search", "db.write_query"]
+  },
+  {
+  def support_bot(question: str) -> str:
+      context = retriever(question)
+      system_message = (
+          "You are a helpful customer support agent. "
+          "Answer using only the information provided below:\n\n"
+          + "\n".join(context)
+      )
+      response = client.chat.completions.create(
+          model="gpt-5.4-mini",
+          messages=[
+              {"role": "system", "content": system_message},
+              {"role": "user", "content": question},
+          ],
+      )
+      return response.choices[0].message.content
+
+  if __name__ == "__main__":
+      print(support_bot("How many users can I have on the Starter plan?"))
   },
   {
     label: "Document access: HR senior (authorized)",
