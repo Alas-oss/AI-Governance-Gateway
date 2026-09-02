@@ -34,7 +34,7 @@ This gateway addresses all four with a single request pipeline, rather than bolt
  └─────────────────────────────────────────────────────────────┘
       │
       ▼
- internal AI backend / LLM infra
+ Internal AI backend / LLM infra
 ```
 
 Every stage is an indepedent testable module; `app/main.py` wires them together into one route (`/v1/{path:path}`) that mirrors whatever API shape your upstream backend exposes (OpenAI-style chat completions by default).
