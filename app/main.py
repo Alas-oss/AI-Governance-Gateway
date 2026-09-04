@@ -26,6 +26,7 @@ from app.policy.enforcement import (
     get_permission_matrix,
     redact_payload_for_persisted_view,
 )
+from app.policy.manifest import build_capability_manifest, preflight_check
 from app.proxy.client import UpstreamProxyClient, UpstreamUnavailableError
 from app.rate_limit.limiter import SlidingWindowRateLimiter
 from app.rate_limit.redis_client import RedisClientManager
@@ -143,6 +144,29 @@ async def governed_proxy(path: str, request: Request) -> Response:
     has_document_reference = False
 
     if json_body is not None:
+        manifest = build_capability_manifest(user, settings)
+        preflight = preflight_check(manifest, json_body, document_registry)
+        if not preflight.permitted:
+            logger.info(
+                "Preflight denied for user_id=%s path=%s reason=%s",
+                user.user_id,
+                path,
+                preflight.reason,
+            )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "insufficient_clearance",
+                    "detail": (
+                        "None of the tools or documents this request needs are permitted for you "
+                        "clearance level/department."
+                    ),
+                    "reason": preflight.reason,
+                    "missing_tools": preflight.missing_tools,
+                    "missing_documents": preflight.missing_documents,
+                },
+            )
+        
         try:
             policy_filtered_body = enforce_policy_on_payload(json_body, user, settings)
         except Exception as exc:  # noqa: BLE001 -> never lets a policy bug leak

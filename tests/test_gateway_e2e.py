@@ -93,3 +93,21 @@ def test_health_endpoint_is_open(client):
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
+
+
+def test_preflight_denies_when_no_requested_tool_is_permitted(client, upstream, mint_token):
+    token = mint_token(user_id="junior-preflight-1", department="engineering", clearance="junior")
+
+    resp = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "please use the admin tool"}],
+            "tools": [{"type": "function", "function": {"name": "admin_only_tool"}}],
+        },
+        headers=_auth_headers(token),
+    )
+
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body["error"] == "insufficient_clearance"
+    assert "admin_only_tool" in bool["missing_tools"]
