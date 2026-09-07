@@ -9,12 +9,21 @@ logger = logging.getLogger(__name__)
 
 def langfuse_mask(*, data: Any, **_: Any) -> Any:
     if isinstance(data, str):
+        redacted = data
         try:
-            from app.documents.pipeline import STRUCTURAL_SENTINEL_PATTERN
+            from app.documents.pipeline import STRUCTURAL_SENTINEL_PATTERN as DOC_SENTINEL_PATTERN
 
-            return STRUCTURAL_SENTINEL_PATTERN.sub("[DOCUMENT CONTENT REDACTED]", data)
+            redacted = DOC_SENTINEL_PATTERN.sub("[DOCUMENT CONTENT REDACTED]", redacted)
+        except ImportError: 
+            pass
+        try:
+            from app.interagent.pipeline import STRUCTURAL_SENTINEL_PATTERN as IAP_SENTINEL_PATTERN
+
+            redacted = IAP_SENTINEL_PATTERN.sub("[INTER-AGENT PAYLOAD REDACTED]", redacted)
         except ImportError:
-            return data
+            pass
+        return redacted
+
     if isinstance(data, dict):
         return {key: langfuse_mask(data=value) for key, value in data.items()}
     if isinstance(data, list):
@@ -27,7 +36,7 @@ class AuditLogger:
         self._client = None
 
         if not self._enabled:
-            logger.info("Langfuse audit logging disabled (langfuse_enabled=False).")
+            logger.info("Lagnfuse audit logging disabled (langfuse_enabled=False).")
             return
 
         try:
@@ -40,7 +49,7 @@ class AuditLogger:
                 mask=langfuse_mask,
             )
             logger.info("Langfuse audit logging enabled (host=%s, mask hook active).", settings.langfuse_host)
-        except Exception as exc: # noqa: BLE001 -> observability shouldn't crash the gateway
+        except Exception as exc: # noqa BLE001
             logger.warning("Langfuse client failed to initialize (%s); audit logging disabled.", exc)
             self._enabled = False
 
@@ -49,20 +58,13 @@ class AuditLogger:
         return self._enabled and self._client is not None
 
     def log_call(
-            self, 
-            *,
-            user_id: str, 
-            department: str,
-            masked_request: Optional[Dict[str, Any]],
-            masked_response: Optional[Dict[str, Any]],
-            prompt_tokens: int,
-            completion_tokens: int,
-            cache_hit: bool,
+            self, *, user_id: str, department: str, masked_request: Optional[Dict[str, Any]],
+            masked_response: Optional[Dict[str, Any]], prompt_tokens: int, completion_tokens: int, cache_hit: bool,
     ) -> None:
         if not self.enabled:
             return
 
-        try:
+        try: 
             observation = self._client.start_observation(
                 name="governed_proxy_call",
                 as_type="generation",
@@ -82,8 +84,8 @@ class AuditLogger:
     def shutdown(self) -> None:
         if self._client is None:
             return
-        try:
+        try: 
             self._client.flush()
             self._client.shutdown()
-        except Exception: # noqa: BLE001 -> clean-up
-            logger.exception("Error shutting down Langfuse client.")
+        except Exception: # noqa: BLE001
+            logger.exception("Error shutting down Langfuse clinet.")

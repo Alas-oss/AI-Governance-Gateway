@@ -69,6 +69,15 @@ def _strip_documents_from_paylaod(payload: Dict[str, Any], document_token: str, 
 
     from app.documents.pipeline import strip_document_content
 
+    return _strip_sentinels_from_payload(payload, strip_document_content, document_token, is_response=is_response)
+
+def _strip_interagent_from_payload(payload: Dict[str, Any], interagent_token: str, *, is_response: bool) -> Dict[str, Any]:
+
+    from app.interagent.pipeline import strip_interagent_payload
+
+    return _strip_sentinels_from_payload(payload, strip_interagent_payload, interagent_token, is_response=is_response)
+
+def _strip_sentinels_from_payload(payload: Dict[str, Any], strip_fn, token: str, *, is_response: bool) -> Dict[str, Any]:
     mutated = dict(payload)
 
     if is_response:
@@ -82,9 +91,9 @@ def _strip_documents_from_paylaod(payload: Dict[str, Any], document_token: str, 
                 choice = dict(choice)
                 message = choice.get("message")
                 if isinstance(message, dict) and isinstance(message.get("content"), str):
-                    choice["message"] = {**message, "content": strip_document_content(message["content"], document_token)}
+                    choice["message"] = {**message, "content": strip_fn(message["content"], token)}
                 if isinstance(choice.get("text"), str):
-                    choice["text"] = strip_document_content(choice["text"], document_token)
+                    choice["text"] = strip_fn(choice["text"], token)
                 new_choices.append(choice)
             mutated["choices"] = new_choices
         return mutated
@@ -94,7 +103,7 @@ def _strip_documents_from_paylaod(payload: Dict[str, Any], document_token: str, 
         new_message = []
         for message in messages: 
             if isinstance(message, dict) and isinstance(message.get("content"), str):
-                message = {**message, "content": strip_document_content(message["content"], document_token)}
+                message = {**message, "content": strip_fn(message["content"], token)}
             new_message.append(message)
         mutated["messages"] = new_message
     return mutated
@@ -105,10 +114,13 @@ def build_persisted_view(
         *,
         is_response: bool = False,
         document_token: Optional[str] = None,
+        interagent_token: Optional[str] = None,
 ) -> Dict[str, Any]:
     working = payload
     if document_token:
         working = _strip_documents_from_paylaod(working, document_token, is_response=is_response)
+    if interagent_token:
+        working = _strip_interagent_from_payload(working, interagent_token, is_response=is_response)
 
     if is_response:
         return mask_outbound_response_json(working, engine, exempt_entities=None, entities=list(PERSISTED_VIEW_ENTITIES))
