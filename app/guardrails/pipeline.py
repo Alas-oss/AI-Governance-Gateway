@@ -4,8 +4,33 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.guardrails.engine import PERSISTED_VIEW_ENTITIES, GuardrailsEngine
+from app.guardrails.json_masking import mask_json_encoded_string
 
 logger = logging.getLogger(__name__)
+
+def _mask_tool_calls(
+        tool_calls: Any, 
+        engine: GuardrailsEngine,
+        exempt_entities: Optional[List[str]] = None,
+        entities: Optional[List[str]] = None,
+) -> Any:
+    if not isinstance(tool_calls, list):
+        return tool_calls
+
+    masked_calls = []
+    for call in tool_calls:
+        if not isinstance(call, dict):
+            masked_calls.append(call)
+            continue
+        call = dict(call)
+        function = call.get("function")
+        if isinstance(function, dict) and isinstance(function.get("arguments"), str):
+            masked_arguments = mask_json_encoded_string(
+                function["arguments"], engine, exempt_entities=exempt_entities, entities=entities
+            )
+            call["function"] = {**function, "arguments": masked_arguments}
+        masked_calls.append(call)
+    return masked_calls
 
 def mask_inbound_payload(
         payload: Dict[str, Any],
@@ -18,15 +43,28 @@ def mask_inbound_payload(
     if isinstance(messages, list):
         new_messages = []
         for message in messages:
-            if isinstance(message, dict) and isinstance(message.get("content"), str):
-                result = engine.mask_text(message["content"], entities=entities, exempt_entities=exempt_entities)
-                if result.had_matches:
-                    message = {**message, "content": result.text}
+            if isinstance(message, dict):
+                if isinstance(message.get("content"), str):
+                    if message.get("role") == "tool":
+                        masked_content = mask_json_encoded_string(
+                            message["content"], engine, exempt_entities=exempt_entities, entities=entities
+                        )
+                        if masked_content != message["content"]:
+                            message = {**message, "content": masked_content}
+                    else:
+                        result = engine.mask_text(message["content"], entities=entities, exempt_entities=exempt_entities)
+                        if result.had_matches:
+                            message = {**message, "content": result.text}
+                if isinstance(message.get("tool_calls"), list):
+                    masked_calls = _mask_tool_calls(
+                        message["tool_calls"], engine, exempt_entities=exempt_entities, entities=entities
+                    )
+                    message = {**message, "tool_calls": masked_calls}
             new_messages.append(message)
         mutated["messages"] = new_messages
     return mutated
 
-def _mask_openai_style_choices(
+def _mask_openai_styl_choices(
         payload: Dict[str, Any],
         engine: GuardrailsEngine,
         exempt_entities: Optional[List[str]] = None,
@@ -41,11 +79,18 @@ def _mask_openai_style_choices(
         if not isinstance(choice, dict):
             new_choices.append(choice)
             continue
-        choice = dict(choice) 
+        choice = dict(choice)
         message = choice.get("message")
-        if isinstance(message, dict) and isinstance(message.get("content"), str):
-            masked_content = engine.mask_text(message["content"], entities=entities, exempt_entities=exempt_entities).text
-            choice["message"] = {**message, "content": masked_content}
+        if isinstance(message, dict):
+            if isinstance(message.get("content"), str):
+                masked_content = engine.mask_text(message["content"], entities=entities, exempt_entities=exempt_entities).text
+                message = {**message, "content": masked_content}
+            if isinstance(message.get("tool_calls"), list):
+                masked_calls = _mask_tool_calls(
+                    message["tool_calls"], engine, exempt_entities=exempt_entities, entities=entities
+                )
+                message = {**message, "tool_calls": masked_calls}
+            choice["message"] = message
         if isinstance(choice.get("text"), str):
             choice["text"] = engine.mask_text(choice["text"], entities=entities, exempt_entities=exempt_entities).text
         new_choices.append(choice)

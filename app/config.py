@@ -45,7 +45,29 @@ class Settings(BaseSettings):
         description="Override the default entity allowlist masked by the guardrails engine. "
         "Leave unset to use app.guardrails.engine.DEFAULT_ENTITIES_TO_MASK.",
     )
-
+    guardrails_injection_scan_enabled: bool = Field(
+        default=True,
+        description="Scan inbound requests for prompt-injection patterns and log any findings. " \
+        "Non-blocking by default - see guardrails_injection_block_nebled to actually reject " \
+        "flagged requests once the pattern set is tuned for your traffic.",
+    )
+    guardrails_injection_block_enabled: bool = Field(
+        default=False,
+        description="If true, reject (400) requests where a prompt-injection finding's score meets " \
+        "or exceeds guardrails_injection_block_threshold, instead of only logging it. Off by " \
+        "default: a pattern-based detector should be tuned against real traffic before it's given " \
+        "the power to reject requests outright.",
+    )
+    guardrails_injection_block_threshold: float = Field(
+        defaul=0.85,
+        ge=0.0,
+        le=1.0,
+        description="Minimum injection-finding score requried to block a request when " \
+        "guardrails_injection_block_enabled is true. Deliberately higher than " \
+        "guardrails_score_threshold - blokcing is a stronger action than masking and should " \
+        "require stronger confidence.",
+    )
+    
     redis_url: str = Field(
         default="redis://localhost:6379/0",
         description="Redis connection URL backing the rate limiter and token accounting.",

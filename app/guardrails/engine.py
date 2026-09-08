@@ -44,6 +44,8 @@ DEFAULT_ENTITIES_TO_MASK: Tuple[str, ...] = (
 
 PERSISTED_VIEW_ENTITIES: Tuple[str, ...] = DEFAULT_ENTITIES_TO_MASK + ("MONETARY_AMOUNT",)
 
+INJECTION_ENTITY_TYPES: Tuple[str, ...] = ("PROMPT_INJECTION_ATTEMPT",)
+
 @dataclass
 class MaskFinding:
     entity_type: str
@@ -152,6 +154,12 @@ class GuardrailsEngine:
                 ", ".join(f.entity_type for f in exempt_findings),
             )
         return MaskResult(text=masked, findings=findings)
+
+    def scan_entities(self, text: str, entities: List[str]) -> List[RecognizerResult]:
+        if not text:
+            return []
+        raw_results = self._analyzer.analyze(text=text, language="en", entities=entities)
+        return [r for r in raw_results if r.score >= self._score_threshold]
 
 _engine_singleton: Optional[GuardrailsEngine] = None
 

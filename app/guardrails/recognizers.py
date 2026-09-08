@@ -107,4 +107,41 @@ def build_custom_recognizers() -> List[PatternRecognizer]:
         build_proprietary_source_recognizer(),
         build_bank_card_recognizer(),
         build_monetary_amount_recognizer(),
+        build_prompt_injection_recognizer(),
     ]
+
+_PROMPT_INJECTION_PATTERNS = [
+    Pattern(
+        name="injection_ignore_instructions",
+        regex=r"\b(ignore|disregard|forget)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all)\b[^.\n]{0,20}\b(instructions?|prompt|rules?)\b",
+        score=0.6,
+    ),
+    Pattern(
+        name="injection_reveal_system_prompt",
+        regex=r"\b(reveal|show|print|repeat|output)\b[^.\n]{0,30}\b(your |the )?(system prompt|instructions|initial prompt)\b",
+        score=0.6,
+    ),
+    Pattern(
+        name="injection_jailbreak_framing",
+        regex=r"\b(developer mode|DAN mode|jailbreak(ed)?|no (restrictions|filters|limitations)|unfiltered mode|act as if you (have no|had no))\b",
+        score=0.55,
+    ),
+    Pattern(
+        name="injection_role_override",
+        regex=r"\byou are now\b[^.\n]{0,40}\b(a|an)\b[^.\n]{0,60}\bwith no\b",
+        score=0.5,
+    ),
+    Pattern(
+        name="injection_new_instructions_marker",
+        regex=r"\b(new|updated|real|actual)\s+(system\s+)?instructions?\s*:",
+        score=0.5,
+    ),
+]
+
+def build_prompt_injection_recognizer() -> PatternRecognizer:
+    return PatternRecognizer(
+        supported_entity="PROMPT_INJECTION_ATTEMPT",
+        patterns=_PROMPT_INJECTION_PATTERNS,
+        context=["ignore", "instructions", "system prompt", "jailbreak", "restrictions"],
+        global_regex_flags=re.IGNORECASE | re.DOTALL,
+    )

@@ -17,6 +17,7 @@ from app.config import get_settings
 from app.documents.pipeline import generate_request_token, payload_references_documents, resolve_document_references
 from app.documents.registry import DocumentRegistry
 from app.guardrails.engine import get_engine, init_guardrails_engine
+from app.guardrails.injection_scanner import scan_payload_for_injection
 from app.guardrails.pipeline import build_persisted_view, mask_inbound_payload, mask_outbound_response_json
 from app.observability.langfuse_logger import AuditLogger
 from app.policy.enforcement import (
@@ -182,6 +183,26 @@ async def governed_proxy(path: str, request: Request) -> Response:
             except Exception as exc:  # noqa: BLE001 -> blocks the call, does not leak a document
                 logger.exception("Document reference resolution failed for user_id=%s path=%s", user.user_id, path)
                 raise HTTPException(status_code=500, detail="Document access resolution failed.") from exc
+        if settings.guardrails_injection_scan_enabled:
+            scan_result = scan_payload_for_injection(policy_filtered_body, get_engine())
+            if scan_result.has_findings:
+                logger.warning(
+                    "Prompt-injection pattern(s) flagged for user_id=%s path=%s max_score=%.2f source=%s",
+                    user.user_id,
+                    path,
+                    scan_result.max_score(),
+                    [f.score for f in scan_result.findings],
+                )
+                if settings.guardrails_injection_block_enabled and scan_result.exceeds(
+                    settings.guardrails_injection_block_threshold
+                ):
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": "content_flagged",
+                            "detail": "This request was flagged by adversarial-content scanning and rejected.",
+                        },
+                    )
 
         try:
             json_body = mask_inbound_payload(
