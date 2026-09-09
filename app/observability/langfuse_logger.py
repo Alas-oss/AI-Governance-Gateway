@@ -47,47 +47,47 @@ class AuditLogger:
             logger.warning("Languse client failed to initialize (%s); audit logging disabled.", exc)
             self._enabled = False
 
-        @property
-        def enabled(self) -> bool:
-            return self._enabled and self._client is not None
+    @property
+    def enabled(self) -> bool:
+        return self._enabled and self._client is not None
 
-        def loag_call(
-            self, *, user_id: str, department: str, masked_request: Optional[Dict[str, Any]],
-            masked_response: Optional[Dict[str, Any]], prompt_tokens: int, completion_tokens: int, cache_hit: bool,
-            trace_id: Optional[str] = None,
-            span_id: Optional[str] = None,
-            parent_span_id: Optional[str] = None,
-        ) -> None:
-            if not self.enabled:
-                return
+    def log_call(
+        self, *, user_id: str, department: str, masked_request: Optional[Dict[str, Any]],
+        masked_response: Optional[Dict[str, Any]], prompt_tokens: int, completion_tokens: int, cache_hit: bool,
+        trace_id: Optional[str] = None,
+        span_id: Optional[str] = None,
+        parent_span_id: Optional[str] = None,
+    ) -> None:
+        if not self.enabled:
+            return
 
-            try:
-                observation_kwargs: Dict[str, Any] = dict(
-                    name="governed_proxy_call",
-                    as_type="generation",
-                    input=masked_request,
-                    output=masked_response,
-                    metadata={"user_id": user_id, "department": department, "cache_hit": cache_hit},
-                    usage_details={
-                        "input": prompt_tokens,
-                        "output": completion_tokens,
-                        "total": prompt_tokens + completion_tokens,
-                    },
-                )
-                if trace_id:
-                    observation_kwargs["trace_context"] = {"trace_id": trace_id, "parent_span_id": parent_span_id}
-                    if span_id:
-                        observation_kwargs["id"] = span_id
-                observation = self._client.start_observation(**observation_kwargs)
-                observation.end()
-            except Exception:
-                logger.exception("Langfuse audit logging failed for user_id=%s; request was not blocked.", user_id)
+        try:
+            observation_kwargs: Dict[str, Any] = dict(
+                name="governed_proxy_call",
+                as_type="generation",
+                input=masked_request,
+                output=masked_response,
+                metadata={"user_id": user_id, "department": department, "cache_hit": cache_hit},
+                usage_details={
+                    "input": prompt_tokens,
+                    "output": completion_tokens,
+                    "total": prompt_tokens + completion_tokens,
+                },
+            )
+            if trace_id:
+                observation_kwargs["trace_context"] = {"trace_id": trace_id, "parent_span_id": parent_span_id}
+                if span_id:
+                    observation_kwargs["id"] = span_id
+            observation = self._client.start_observation(**observation_kwargs)
+            observation.end()
+        except Exception:
+            logger.exception("Langfuse audit logging failed for user_id=%s; request was not blocked.", user_id)
 
-        def shutdown(self) -> None:
-            if self._client is None: 
-                return
-            try: 
-                self._client.flush()
-                self._client.shutdown()
-            except Exception: # noqa: BLE001
-                logger.exception("Error shutting down Langfuse client.")
+    def shutdown(self) -> None:
+        if self._client is None: 
+            return
+        try: 
+            self._client.flush()
+            self._client.shutdown()
+        except Exception: # noqa: BLE001
+            logger.exception("Error shutting down Langfuse client.")
