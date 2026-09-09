@@ -1,5 +1,27 @@
 from __future__ import annotations
 
+from __future__ import annotations
+
+# =====================================================================
+# UPDATED TORCH MOCK (FIXES THE TRANSFORMERS __SPEC__ VALUEERROR)
+# =====================================================================
+import sys
+from types import ModuleType
+import importlib.machinery
+
+if "torch" not in sys.modules:
+    mock_torch = ModuleType("torch")
+    mock_torch.cuda = ModuleType("torch.cuda")
+    mock_torch.cuda.is_available = lambda: False
+    mock_torch.__version__ = "2.0.0"
+    
+    # This dummy spec satisfies the transformers package environment check
+    mock_torch.__spec__ = importlib.machinery.ModuleSpec("torch", None)
+    
+    sys.modules["torch"] = mock_torch
+    sys.modules["torch.cuda"] = mock_torch.cuda
+# =====================================================================
+
 import copy
 import re
 from typing import Any, Dict, List, Optional
@@ -23,6 +45,9 @@ from app.policy.enforcement import (
     get_masking_exempt_entities,
     redact_payload_for_persisted_view,
 )
+
+# ... (rest of your application continues exactly the same here)
+
 
 app = FastAPI(title="AI Governance Gateway -- Live Demo")
 
