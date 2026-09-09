@@ -115,7 +115,7 @@ class Settings(BaseSettings):
     langfuse_host: str = Field(default="http://localhost:3000")
 
     service_name: str = Field(default="ai-governance-gateway")
-    hop_by_hop_headers: List[str] = Field(
+    step_by_step_headers: List[str] = Field(
         default_factory=lambda: [
             "connection",
             "keep-alive",

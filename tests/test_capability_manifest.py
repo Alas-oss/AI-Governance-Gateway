@@ -42,10 +42,10 @@ def test_narrow_can_only_shrink_never_grow(settings):
 def test_narrow_increments_depth(settings):
     manifest = build_capability_manifest(_user(ClearanceLevel.SENIOR), settings, max_delegation_depth=2)
     assert manifest.depth == 0
-    hop1 = manifest.narrow()
-    assert hop1.depth == 1
+    step1 = manifest.narrow()
+    assert step1.depth == 1
     with pytest.raises(DelegationDepthExceeded):
-        hop1.narrow()
+        step1.narrow()
 
 def test_requested_tool_names_extracts_function_names():
     payload = {

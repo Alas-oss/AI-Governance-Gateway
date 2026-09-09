@@ -43,8 +43,8 @@ class UpstreamProxyClient:
         return self._client
 
     def _build_forward_headers(self, request: Request) -> Dict[str, str]:
-        hop_by_hop = {h.lower() for h in self._settings.hop_by_hop_headers}
-        return {k: v for k, v in request.headers.items() if k.lower() not in hop_by_hop}
+        step_by_step = {h.lower() for h in self._settings.step_by_step_headers}
+        return {k: v for k, v in request.headers.items() if k.lower() not in step_by_step}
 
     async def forward(self, request: Request, path: str, json_body: Optional[Dict[str, Any]]) -> httpx.Response:
         headers = self._build_forward_headers(request)
