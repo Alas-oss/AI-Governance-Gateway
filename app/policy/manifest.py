@@ -38,7 +38,7 @@ class CapabilityManifest:
         return tag not in self.restricted_doc_tags
 
     def can_delegate_further(self) -> bool:
-        return self.depth < self.max_delegate_depth
+        return self.depth + 1 < self.max_delegate_depth
 
     def narrow(
         self,

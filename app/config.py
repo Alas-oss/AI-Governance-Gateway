@@ -88,6 +88,18 @@ class Settings(BaseSettings):
         description="tiktoken encoding used for token accounting; falls back to a character "
         "heuristic if the encoding can't be loaded (e.g. restricted network egress).",
     )
+    max_delegation_depth: int = Field(
+        default=4,
+        ge=1,
+        description="Ceiling on X-Delegation-Depth for an inbound request. Requests claiming to "
+        "already be at or beyond this depth are rejected with 403 to break runaway delegation loops.",
+    )
+    chain_rate_limit_window_seconds: int = Field(default=60, ge=1)
+    chain_rate_limit_max_requests: int = Field(
+        default=10,
+        ge=1,
+        description="Max requests sharing the same X-Delegation-Trace-Id within the window before a 429.",
+    )
 
     semantic_cache_enabled: bool = Field(default=True)
     semantic_cache_path: str = Field(

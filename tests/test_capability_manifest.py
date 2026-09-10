@@ -18,7 +18,7 @@ def settings() -> Settings:
     return Settings(permissions_file_path="app/policy/permissions.yaml")
 
 def _user(clearance: ClearanceLevel, department: str = "engineering") -> UserContext:
-    return UserContext(user_id="text-user", department=department, clearance_level=clearance)
+    return UserContext(user_id="test-user", department=department, clearance_level=clearance)
 
 def test_manifest_reflects_the_users_own_policy(settings):
     manifest = build_capability_manifest(_user(ClearanceLevel.JUNIOR), settings)

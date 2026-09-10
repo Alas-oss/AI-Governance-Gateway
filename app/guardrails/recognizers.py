@@ -113,7 +113,7 @@ def build_custom_recognizers() -> List[PatternRecognizer]:
 _PROMPT_INJECTION_PATTERNS = [
     Pattern(
         name="injection_ignore_instructions",
-        regex=r"\b(ignore|disregard|forget)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all)\b[^.\n]{0,20}\b(instructions?|prompt|rules?)\b",
+        regex=r"\b(ignore|disregard|forget)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all)\b[^.\n]{0,20}\b(instr\w*|prompt|rules?)\b",
         score=0.6,
     ),
     Pattern(

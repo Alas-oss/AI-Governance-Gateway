@@ -20,6 +20,7 @@ from app.guardrails.engine import get_engine, init_guardrails_engine
 from app.guardrails.injection_scanner import scan_payload_for_injection
 from app.guardrails.pipeline import build_persisted_view, mask_inbound_payload, mask_outbound_response_json
 from app.observability.langfuse_logger import AuditLogger
+from app.observability.trace_context import TraceContext, continue_trace
 from app.policy.enforcement import (
     PolicyLoadError,
     enforce_policy_on_payload,
@@ -29,6 +30,7 @@ from app.policy.enforcement import (
 )
 from app.policy.manifest import build_capability_manifest, preflight_check
 from app.proxy.client import UpstreamProxyClient, UpstreamUnavailableError
+from app.rate_limit.chain_limiter import ChainRateLimiter
 from app.rate_limit.limiter import SlidingWindowRateLimiter
 from app.rate_limit.redis_client import RedisClientManager
 from app.rate_limit.token_accounting import TokenAccountingEngine, TokenCounter
@@ -44,13 +46,21 @@ audit_logger = AuditLogger(settings)
 document_registry = DocumentRegistry()
 
 rate_limiter: Optional[SlidingWindowRateLimiter] = None
+chain_rate_limiter: Optional[ChainRateLimiter] = None
 token_accounting: Optional[TokenAccountingEngine] = None
 semantic_cache: Optional[SemanticCache] = None
 
 
+def _with_trace_headers(headers: dict, trace_ctx: TraceContext) -> dict:
+    stamped = dict(headers)
+    stamped["X-Delegation-Trace-Id"] = trace_ctx.trace_id
+    stamped["X-Delegation-Span-Id"] = trace_ctx.span_id
+    return stamped
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    global rate_limiter, token_accounting, semantic_cache
+    global rate_limiter, chain_rate_limiter, token_accounting, semantic_cache
 
     try:
         get_permission_matrix(settings.permissions_file_path)
@@ -67,6 +77,13 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         redis_manager.client,
         window_seconds=settings.rate_limit_window_seconds,
         max_requests=settings.rate_limit_max_requests,
+    )
+    chain_rate_limiter = ChainRateLimiter(
+        SlidingWindowRateLimiter(
+            redis_manager.client,
+            window_seconds=settings.chain_rate_limit_window_seconds,
+            max_requests=settings.chain_rate_limit_max_requests,
+        )
     )
     token_accounting = TokenAccountingEngine(redis_manager.client, TokenCounter(settings.token_encoding_name))
     logger.info(
@@ -119,6 +136,42 @@ async def governed_proxy(path: str, request: Request) -> Response:
     user: Optional[UserContext] = getattr(request.state, "user", None)
     if user is None:
         raise HTTPException(status_code=401, detail="Missing authenticated user context.")
+
+    depth_header = request.headers.get("X-Delegation-Depth")
+    try:
+        incoming_depth = int(depth_header) if depth_header is not None else 0
+    except (TypeError, ValueError):
+        incoming_depth = 0
+
+    if incoming_depth >= settings.max_delegation_depth:
+        return JSONResponse(
+            status_code=403,
+            content={
+                "error": "delegation_depth_exceeded",
+                "detail": (
+                    f"Delegation depth {incoming_depth} is at or beyond the maximum allowed "
+                    f"depth ({settings.max_delegation_depth})."
+                ),
+            },
+        )
+
+    trace_ctx = continue_trace(
+        trace_id=request.headers.get("X-Delegation-Trace-Id"),
+        parent_span_id=request.headers.get("X-Delegation-Parent-Span-Id"),
+        depth=incoming_depth,
+    )
+
+    assert chain_rate_limiter is not None
+    chain_limit_result = await chain_rate_limiter.check_and_record_chain(trace_ctx.trace_id)
+    if not chain_limit_result.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Delegation chain rate limit exceeded: {chain_limit_result.request_count} requests "
+                f"in {chain_limit_result.window_seconds}s on trace {trace_ctx.trace_id} "
+                f"(limit={chain_limit_result.limit})."
+            ),
+        )
 
     assert rate_limiter is not None  
     limit_result = await rate_limiter.check_and_record(user.user_id)
@@ -257,7 +310,7 @@ async def governed_proxy(path: str, request: Request) -> Response:
                 content=_json.dumps(lookup_result.response_payload).encode("utf-8"),
                 status_code=200,
                 media_type="application/json",
-                headers={"X-Cache": "HIT"},
+                headers=_with_trace_headers({"X-Cache": "HIT"}, trace_ctx),
             )
 
     try:
@@ -366,7 +419,7 @@ async def governed_proxy(path: str, request: Request) -> Response:
     return Response(
         content=response_body,
         status_code=upstream_response.status_code,
-        headers=response_headers,
+        headers=_with_trace_headers(response_headers, trace_ctx),
         media_type=upstream_response.headers.get("content-type"),
     )
 
