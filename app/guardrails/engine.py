@@ -117,7 +117,7 @@ class GuardrailsEngine:
             return MaskResult(text=text)
 
         counters: Dict[str, int] = {}
-        spans: List[Tuple[int, int, str]] = [] #start, end, the placeholder
+        spans: List[Tuple[int, int, str]] = [] 
         findings: List[MaskFinding] = []
 
         for result in accepted:

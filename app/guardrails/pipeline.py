@@ -64,7 +64,7 @@ def mask_inbound_payload(
         mutated["messages"] = new_messages
     return mutated
 
-def _mask_openai_styl_choices(
+def _mask_openai_style_choices(
         payload: Dict[str, Any],
         engine: GuardrailsEngine,
         exempt_entities: Optional[List[str]] = None,

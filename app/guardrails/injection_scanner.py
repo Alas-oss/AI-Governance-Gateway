@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from app.guardrails.engine import INJECTION_ENTITY_TYPES, GuardrailsEngine
 
 @dataclass(frozen=True)
-class Injectionfinding:
+class InjectionFinding:
     entity_type: str
     score: float
     snippet: str
@@ -14,14 +14,14 @@ class Injectionfinding:
 
 @dataclass(frozen=True)
 class InjectionScanResult:
-    findings: List[Injectionfinding] = field(default_factory=list)
+    findings: List[InjectionFinding] = field(default_factory=list)
 
     @property 
     def has_findings(self) -> bool:
         return len(self.findings) > 0
 
     def max_score(self) -> float:
-        return max((f.score for c in self.findings), default=0.0)
+        return max((f.score for f in self.findings), default=0.0)
 
     def exceeds(self, threshold: float) -> bool:
         return self.max_score() >= threshold
@@ -35,22 +35,22 @@ def _snippet(text: str, start: int, end: int) -> str:
     suffix = "..." if hi < len(text) else ""
     return f"{prefix}{text[lo:hi]}{suffix}"
 
-def scan_text_for_injection(text: str, engine, GuardrailsEngine, *, source: str = "text") -> List[Injectionfinding]:
+def scan_text_for_injection(text: str, engine: GuardrailsEngine, *, source: str = "text") -> List[InjectionFinding]:
     if not text:
         return []
     matches = engine.scan_entities(text, entities=list(INJECTION_ENTITY_TYPES))
     return [
-        Injectionfinding(
+        InjectionFinding(
             entity_type=match.entity_type,
             score=match.score,
-            snipped=_snippet(text, match.start, match.end),
+            snippet=_snippet(text, match.start, match.end),
             source=source,
         )
         for match in matches
     ]
 
 def scan_payload_for_injection(payload: Dict[str, Any], engine: GuardrailsEngine) -> InjectionScanResult:
-    findings: List[Injectionfinding] = []
+    findings: List[InjectionFinding] = []
 
     messages = payload.get("messages")
     if isinstance(messages, list):
@@ -68,7 +68,7 @@ def scan_payload_for_injection(payload: Dict[str, Any], engine: GuardrailsEngine
                 for call_index, call in enumerate(tool_calls):
                     if not isinstance(call, dict):
                         continue
-                    functoin = call.get("function")
+                    function = call.get("function")
                     if isinstance(function, dict) and isinstance(function.get("arguments"), str):
                         findings.extend(
                             scan_text_for_injection(

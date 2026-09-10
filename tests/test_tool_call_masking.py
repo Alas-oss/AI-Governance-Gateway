@@ -13,7 +13,7 @@ def _engine() -> GuardrailsEngine:
 
 def test_mask_json_value_mask_nested_string_leaves():
     engine = _engine()
-    value = {"employee": {"card": "4111 1111 1111 1111", "name": "Mysterio"}, "notes": {"backup card 4111 1111 1111 1111"}}
+    value = {"employee": {"card": "4111 1111 1111 1111", "name": "Mysterio"}, "notes": ["backup card 4111 1111 1111 1111"]}
 
     masked = mask_json_value(value, engine)
 
@@ -115,7 +115,7 @@ def test_mask_outbound_response_masks_tool_call_arguments():
 
     masked = mask_outbound_response_json(payload, engine)
 
-    arguments = masked["choice"][0]["message"]["tool_calls"][0]["function"]["arguments"]
+    arguments = masked["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]
     assert "4111 1111 1111 1111" not in arguments
 
 def test_mask_outbound_response_respects_exemptions_in_tool_calls():
@@ -154,7 +154,7 @@ def test_mask_inbound_payload_doe_not_mutate_original_tool_calls():
             {
                 "role": "assistant",
                 "content": None,
-                "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "x", "argumnets": original_arguments}}],
+                "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "x", "arguments": original_arguments}}],
             }
         ]
     }

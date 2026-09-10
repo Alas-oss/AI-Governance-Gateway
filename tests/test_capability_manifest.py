@@ -74,7 +74,7 @@ def test_preflight_permits_when_fully_covered(settings):
     result = preflight_check(manifest, payload)
     assert result.permitted
 
-def tesT_preflight_permits_when_partially_covered(settings):
+def test_preflight_permits_when_partially_covered(settings):
     manifest = build_capability_manifest(_user(ClearanceLevel.JUNIOR), settings)
     payload = {
         "messages": [{"role": "user", "content": "hi"}],
@@ -96,7 +96,7 @@ def test_preflight_denies_when_nothing_is_covered(settings):
     assert not result.permitted
     assert "admin_only_tool" in result.missing_tools
 
-def tesT_preflight_permits_when_no_tools_or_documents_requested(settings):
+def test_preflight_permits_when_no_tools_or_documents_requested(settings):
     manifest = build_capability_manifest(_user(ClearanceLevel.JUNIOR), settings)
     payload = {"messages": [{"role": "user", "content": "just a plain question"}]}
     result = preflight_check(manifest, payload)

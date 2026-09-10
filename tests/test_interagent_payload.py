@@ -13,7 +13,7 @@ def test_wrap_then_strip_never_leaks_string_content():
     token = generate_request_token()
     wrapped = wrap_interagent_payload(token, "SUBAGENT:finance-summary", "The real Q3 valuation is $480M.")
 
-    stripped = wrap_interagent_payload(wrapped, token)
+    stripped = strip_interagent_payload(wrapped, token)
 
     assert "$480M" not in stripped
     assert "SUBAGENT:finance-summary" in stripped
@@ -74,7 +74,7 @@ def test_structural_sentinel_pattern_matches_regardless_of_token():
     token = generate_request_token()
     wrapped = wrap_interagent_payload(token, "SUBAGENT:x", "should never appear in a trace")
 
-    redacted = STRUCTURAL_SENTINEL_PATTERN.sub("[INTER_AGENT PAYLOAD REDACTED]", wrapped)
+    redacted = STRUCTURAL_SENTINEL_PATTERN.sub("[INTER-AGENT PAYLOAD REDACTED]", wrapped)
 
     assert "should never appear in a trace" not in redacted
     assert redacted == "[INTER-AGENT PAYLOAD REDACTED]"
@@ -100,7 +100,7 @@ def test_build_persisted_view_stirps_interagent_payload_end_to_end():
 
     persisted = build_persisted_view(payload, engine, interagent_token=token)
 
-    persisted_text = persisted["message"][1]["content"]
+    persisted_text = persisted["messages"][1]["content"]
     assert "$480M" not in persisted_text
     assert "4111 1111 1111 1111" not in persisted_text
     assert "SUBAGENT:finance-summary" in persisted_text

@@ -49,6 +49,12 @@ def _last_user_message_text(payload: Dict[str, Any]) -> str:
     messages = payload.get("messages")
     if not isinstance(messages, list):
         return ""
+    for message in reversed(messages):
+        if isinstance(message, dict) and message.get("role") == "user":
+            content = message.get("content")
+            if isinstance(content, str):
+                return content
+    return ""
 
 def _matches_topic(spec: SubAgentSpec, query_text: str) -> bool:
     if not spec.topic_keywords:
@@ -85,9 +91,17 @@ def route_delegation(
     if not preflight.permitted:
         return DelegationDecision(
             action=DelegationAction.DENY,
+            reason=preflight.reason or "no usable tools or documents for this request",
+            denial_message=_DENIAL_MESSAGE_TEMPLATE.format(reason=preflight.reason),
+        )
+
+    if not manifest.can_delegate_further():
+        return DelegationDecision(
+            action=DelegationAction.DENY,
             reason="delegation depth limit reached",
             denial_message=_DENIAL_MESSAGE_TEMPLATE.format(reason="this request required too many delegation steps"),
         )
+
     query_text = _last_user_message_text(payload)
     candidates = [s for s in sub_agents if _matches_topic(s, query_text)]
     if not candidates:
@@ -96,16 +110,17 @@ def route_delegation(
             reason="no sub-agent's domain matches this request",
             denial_message=_DENIAL_MESSAGE_TEMPLATE.format(reason="no matching capability found"),
         )
+
     requested_tools = requested_tool_names(payload)
     all_requested_tools_permitted = all(manifest.can_use_tool(t) for t in requested_tools)
 
     if all_requested_tools_permitted:
-        for spc in candidates:
+        for spec in candidates:
             if _manifest_supports_spec(spec, manifest):
                 sub_manifest = _try_narrow(spec, manifest)
                 if sub_manifest is None:
                     continue
-                return DelegationAction(
+                return DelegationDecision(
                     action=DelegationAction.DELEGATE,
                     reason=f"'{spec.name}' fully covers this request",
                     target=spec.name,

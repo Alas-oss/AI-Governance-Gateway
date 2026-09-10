@@ -59,7 +59,7 @@ class Settings(BaseSettings):
         "the power to reject requests outright.",
     )
     guardrails_injection_block_threshold: float = Field(
-        defaul=0.85,
+        default=0.85,
         ge=0.0,
         le=1.0,
         description="Minimum injection-finding score requried to block a request when " \
